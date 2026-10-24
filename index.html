@@ -32,6 +32,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--brand);box-shadow:0 0
 .rsection p{margin:0 0 5px}.rentry{margin-bottom:9px}.rentrytop{display:flex;justify-content:space-between;gap:10px;font-weight:700}.rsub{color:#5b6475;font-style:italic;margin:1px 0 3px}.rsection ul{margin:4px 0 0;padding-left:15px}.rsection li{margin-bottom:2px}.skills{line-height:1.7}
 .helper{background:#f7f7ff;border:1px solid #e3e3ff;border-radius:11px;padding:13px;margin-top:14px}.helper strong{display:block;font-size:13px;margin-bottom:4px}.helper p{margin:0 0 10px;color:#5d6475;font-size:12px}
 .status{color:var(--good);font-size:12px;font-weight:700;min-height:18px}.footer{text-align:center;color:var(--muted);font-size:12px;padding:26px 10px}
+.ai-panel{background:linear-gradient(135deg,#f7f7ff,#fff);border:1px solid #dedfff;border-radius:12px;padding:14px;margin:0 0 20px}.ai-panel h3{margin:0 0 5px;font-size:14px}.ai-panel p{font-size:12px;color:var(--muted);margin:0 0 10px}.ai-actions{display:flex;flex-wrap:wrap;gap:8px}.ai-actions button{font-size:12px;padding:9px 11px}.ai-status{font-size:12px;color:var(--brand);margin-top:9px;min-height:16px}.ai-config{display:flex;gap:8px;margin-top:10px}.ai-config input{font-size:12px}.cover-output{white-space:pre-wrap;background:#fff;border:1px solid var(--line);padding:14px;border-radius:10px;font-size:13px;min-height:100px}.cover-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
 @media(max-width:900px){.layout{grid-template-columns:1fr}.previewwrap{max-height:none}.intro{align-items:flex-start;flex-direction:column}.resume{min-height:700px}}
 @media(max-width:520px){main{padding:0 12px}.nav{padding:12px}.navright .pill{display:none}.panelbody{padding:15px}.formgrid{grid-template-columns:1fr}.field.full{grid-column:auto}.resume{padding:28px 24px;min-height:650px}.previewwrap{padding:10px}.rname{font-size:23px}}
 @media print{
@@ -55,6 +56,13 @@ input:focus,textarea:focus,select:focus{border-color:var(--brand);box-shadow:0 0
     <section class="panel editor-panel no-print">
       <div class="panelhead"><h2>Resume details</h2><span style="font-size:12px;color:#667085">Step 1 of 1</span></div>
       <div class="panelbody">
+        <div class="ai-panel">
+          <h3>✨ Live AI career assistant</h3>
+          <p>Connect your secure AI backend once, then use Gemini to improve your summary, strengthen experience bullets, tailor your resume, and draft cover letters.</p>
+          <div class="field"><label for="aiEndpoint">Your Cloudflare Worker URL</label><input id="aiEndpoint" placeholder="https://your-worker.your-subdomain.workers.dev" autocomplete="url"></div>
+          <div class="ai-actions" style="margin-top:9px"><button type="button" id="saveEndpoint" class="secondary">Save connection</button><button type="button" id="improveSummary">Improve summary with AI</button><button type="button" id="improveExperience">Improve experience bullets</button><button type="button" id="tailorResume">Tailor to job</button><button type="button" id="makeCoverLetter">Generate cover letter</button></div>
+          <div class="ai-status" id="aiStatus" aria-live="polite">Not connected yet. Deploy the included Worker and paste its URL here.</div>
+        </div>
         <div class="section">
           <div class="sectiontitle"><h3>Personal information</h3></div>
           <div class="formgrid">
@@ -96,7 +104,12 @@ input:focus,textarea:focus,select:focus{border-color:var(--brand);box-shadow:0 0
           <div class="helper"><strong>Basic keyword check</strong><p>Checks which words from the job description also appear in your resume. It is a simple helper, not a guaranteed ATS score.</p><button type="button" id="checkKeywords">Check keywords</button><div id="keywordResult" class="hint" style="margin-top:8px"></div></div>
         </div>
         <div style="display:flex;gap:9px;flex-wrap:wrap"><button id="downloadBtn">Print / Save as PDF</button><button class="secondary" id="sampleBtn">Load sample resume</button></div>
-        <p class="hint">Privacy: your entries stay in this browser using local storage. Avoid using a shared computer, and clear the data when finished.</p>
+        <div class="section" id="coverLetterArea" hidden>
+          <div class="sectiontitle"><h3>AI cover letter draft</h3><button class="secondary" type="button" id="copyCoverLetter">Copy letter</button></div>
+          <div class="cover-output" id="coverLetterOutput"></div>
+          <div class="cover-actions"><button type="button" id="useCoverLetter">Copy to clipboard</button><button type="button" class="secondary" id="closeCoverLetter">Close</button></div>
+        </div>
+        <p class="hint">Privacy: your resume is sent to your configured AI backend only when you click an AI action. Drafts otherwise stay in this browser. Avoid using a shared computer, and clear data when finished.</p>
       </div>
     </section>
     <section class="panel preview-panel">
@@ -116,6 +129,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--brand);box-shadow:0 0
 <script>
 const $ = id => document.getElementById(id);
 const inputIds = ['name','headline','email','phone','location','linkedin','summary','skills','projects','targetRole','jobDescription'];
+const AI_ENDPOINT_KEY = 'resumecraftAiEndpoint';
 let experiences = [{role:'',company:'',dates:'',details:''}];
 let educations = [{degree:'',school:'',dates:'',details:''}];
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -155,6 +169,46 @@ $('sampleBtn').onclick=()=>{const sample={name:'Alex Morgan',headline:'Software 
 $('resetBtn').onclick=()=>{if(!confirm('Clear your resume data from this browser?'))return;inputIds.forEach(id=>$(id).value='');experiences=[{role:'',company:'',dates:'',details:''}];educations=[{degree:'',school:'',dates:'',details:''}];localStorage.removeItem('resumecraftData');renderAndBind();};
 try{const saved=JSON.parse(localStorage.getItem('resumecraftData')||'null');if(saved){Object.entries(saved.fields||{}).forEach(([k,v])=>{if($(k))$(k).value=v;});experiences=saved.experiences?.length?saved.experiences:experiences;educations=saved.educations?.length?saved.educations:educations;}}catch(e){}
 renderAndBind();
+
+// Live AI actions call a separately deployed Cloudflare Worker. Never put the Gemini key in this page.
+const aiStatus = $('aiStatus');
+try { $('aiEndpoint').value = localStorage.getItem(AI_ENDPOINT_KEY) || ''; } catch(e) {}
+function setAiStatus(message, busy=false){ aiStatus.textContent=message; aiStatus.style.color=busy?'#5b5bd6':(message.startsWith('Error')?'#b42318':'#16794b'); }
+function saveEndpoint(){
+  const value=$('aiEndpoint').value.trim().replace(/\/$/,'');
+  if(value && !/^https:\/\//i.test(value)){setAiStatus('Error: enter the HTTPS URL of your deployed Worker.');return false;}
+  try{localStorage.setItem(AI_ENDPOINT_KEY,value);}catch(e){}
+  setAiStatus(value?'AI backend URL saved. Click an AI action to test it.':'AI backend URL cleared.'); return !!value;
+}
+$('saveEndpoint').onclick=saveEndpoint;
+function resumePayload(){return {
+  name:$('name').value, headline:$('headline').value, email:$('email').value, phone:$('phone').value,
+  location:$('location').value, linkedin:$('linkedin').value, summary:$('summary').value,
+  experiences, educations, skills:$('skills').value, projects:$('projects').value,
+  targetRole:$('targetRole').value, jobDescription:$('jobDescription').value
+};}
+async function callAi(action){
+  let endpoint=$('aiEndpoint').value.trim().replace(/\/$/,'');
+  if(!endpoint){setAiStatus('First paste your deployed Cloudflare Worker URL above. See README.md for setup.');$('aiEndpoint').focus();return null;}
+  if(!/^https:\/\//i.test(endpoint)){setAiStatus('Error: the Worker URL must start with https://');return null;}
+  try{localStorage.setItem(AI_ENDPOINT_KEY,endpoint);}catch(e){}
+  const buttons=['improveSummary','improveExperience','tailorResume','makeCoverLetter'];buttons.forEach(id=>$(id).disabled=true);
+  setAiStatus('Gemini is working on your request…',true);
+  try{
+    const response=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,resume:resumePayload()})});
+    let data={};try{data=await response.json();}catch(e){}
+    if(!response.ok)throw new Error(data.error||`Request failed (${response.status}). Check the Worker setup and API key.`);
+    setAiStatus('AI response ready. Review the changes before using them.');return data;
+  }catch(err){setAiStatus('Error: '+(err.message||'Could not reach the AI backend. Check the Worker URL and deployment.'));return null;}
+  finally{buttons.forEach(id=>$(id).disabled=false);}
+}
+$('improveSummary').onclick=async()=>{const d=await callAi('improve_summary');if(!d)return;if(d.summary){$('summary').value=d.summary;render();}if(d.experiences)applyAiExperiences(d.experiences);};
+$('improveExperience').onclick=async()=>{const d=await callAi('improve_experience');if(!d)return;if(d.experiences)applyAiExperiences(d.experiences);if(d.summary){$('summary').value=d.summary;render();}};
+$('tailorResume').onclick=async()=>{if(!$('jobDescription').value.trim()){setAiStatus('Add the target job description first.');$('jobDescription').focus();return;}const d=await callAi('tailor_resume');if(!d)return;if(d.summary)$('summary').value=d.summary;if(d.skills)$('skills').value=Array.isArray(d.skills)?d.skills.join(', '):d.skills;if(d.experiences)applyAiExperiences(d.experiences);if(d.projects)$('projects').value=d.projects;render();if(d.notes)setAiStatus('Resume tailored. Review suggestions: '+d.notes);};
+$('makeCoverLetter').onclick=async()=>{const d=await callAi('cover_letter');if(!d)return;$('coverLetterOutput').textContent=d.coverLetter||d.text||'No letter was returned. Try again.';$('coverLetterArea').hidden=false;$('coverLetterArea').scrollIntoView({behavior:'smooth',block:'nearest'});};
+function applyAiExperiences(items){if(!Array.isArray(items))return;experiences=items.slice(0,8).map(e=>({role:String(e.role||''),company:String(e.company||''),dates:String(e.dates||''),details:Array.isArray(e.bullets)?e.bullets.join('\n'):String(e.details||'')}));if(!experiences.length)experiences=[{role:'',company:'',dates:'',details:''}];renderAndBind();}
+async function copyText(text){try{await navigator.clipboard.writeText(text);setAiStatus('Copied to clipboard.');}catch(e){setAiStatus('Clipboard access unavailable. Select and copy the text manually.');}}
+$('copyCoverLetter').onclick=()=>copyText($('coverLetterOutput').textContent);$('useCoverLetter').onclick=()=>copyText($('coverLetterOutput').textContent);$('closeCoverLetter').onclick=()=>{$('coverLetterArea').hidden=true;};
 </script>
 </body>
 </html>
