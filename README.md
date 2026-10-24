@@ -1,4 +1,4 @@
-# ResumeCraft AI
+# Build Your Resume
 
 A free, single-file resume builder website designed for GitHub Pages.
 
