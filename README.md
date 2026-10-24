@@ -1,4 +1,4 @@
-# ResumeCraft AI — Live Gemini edition
+# Build Your Resume — Live Gemini edition
 
 A GitHub Pages resume builder with real Google Gemini-powered resume improvements, job tailoring, and cover-letter generation. The Gemini API key stays on a Cloudflare Worker, never in the public website code.
 
